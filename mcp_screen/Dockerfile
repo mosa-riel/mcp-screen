@@ -14,7 +14,10 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY server.py /app/server.py
-RUN pip install "mcp>=1.27.2" "httpx>=0.27" "pillow>=10.0" "aioesphomeapi>=24.0"
+RUN pip install "mcp>=1.27.2" "httpx>=0.27" "pillow>=10.0" "aioesphomeapi>=24.0" "playwright>=1.40"
+# Headless Chromium for show_html (HTML/CSS → 1-bit screen). --with-deps apt-installs the
+# browser's system libraries. Big layer (~400MB) — that's the cost of full HTML rendering.
+RUN playwright install --with-deps chromium
 
 EXPOSE 8788 8799
 CMD ["python", "server.py"]

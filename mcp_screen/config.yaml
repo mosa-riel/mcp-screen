@@ -4,7 +4,7 @@
 # device's ESPHome API (:6053) is reached outbound by IP (bridged containers can't do
 # mDNS) — set reterminal_host to the device's (reserved) IP, not its .local name.
 name: MCP Screen (reTerminal e-paper)
-version: "0.1.0"
+version: "0.2.0"
 slug: mcp_screen
 description: Render + host + push screens to the reTerminal E1001 e-paper, over HTTP for the reSpeaker agent
 url: https://github.com/mosa-riel/mcp-screen

@@ -136,6 +136,29 @@ async def _refresh_device() -> str:
         await cli.disconnect()
 
 
+_browser = None  # lazily-launched headless Chromium (Playwright), reused across calls
+
+
+async def _render_html(html: str) -> bytes:
+    """Render an HTML/CSS page to an 800x480 1-bit PNG via headless Chromium."""
+    global _browser
+    from playwright.async_api import async_playwright
+
+    if _browser is None:
+        pw = await async_playwright().start()
+        _browser = await pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
+    page = await _browser.new_page(viewport={"width": W, "height": H})
+    try:
+        await page.set_content(html, wait_until="networkidle")
+        png = await page.screenshot(type="png", clip={"x": 0, "y": 0, "width": W, "height": H})
+    finally:
+        await page.close()
+    img = Image.open(io.BytesIO(png)).convert("L").resize((W, H)).convert("1")  # Floyd–Steinberg
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
 # Server↔server MCP on a trusted internal add-on network — disable the browser-oriented
 # DNS-rebinding guard (localhost-only, no glob) so non-localhost Host headers don't 421.
 mcp = FastMCP(
@@ -166,6 +189,18 @@ async def show_image(url: str) -> str:
     img.save(buf, "PNG")
     _publish(buf.getvalue())
     return f"Afbeelding getoond ({await _refresh_device()})"
+
+
+@mcp.tool()
+async def show_html(html: str) -> str:
+    """Toon een mooi opgemaakt scherm via HTML+CSS (800x480) op het e-paper. Gebruik dit
+    voor presentatie-achtige schermen: kaarten, kolommen, roosters, iconen. Regels voor dit
+    scherm: het is 1-bit ZWART/WIT (geen kleur/grijs die belangrijk is — gebruik hoog
+    contrast, zwarte tekst op wit). Gebruik voor iconen Material Design Icons (mdi
+    webfont via CDN) of inline SVG — GEEN emoji (worden niet weergegeven). Houd het strak
+    en groot (leesbaar op afstand). Geef volledige HTML met inline <style>."""
+    _publish(await _render_html(html))
+    return f"Scherm bijgewerkt ({await _refresh_device()})"
 
 
 @mcp.tool()
