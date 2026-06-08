@@ -1,0 +1,28 @@
+# Bridged (like the other MCPs) so it gets a readable internal DNS name — the agent
+# reaches the MCP endpoint at http://local-mcp-screen:8788/mcp. The PNG host port is
+# published to the host LAN via `ports` so the reTerminal can fetch /screen.png. The
+# device's ESPHome API (:6053) is reached outbound by IP (bridged containers can't do
+# mDNS) — set reterminal_host to the device's (reserved) IP, not its .local name.
+name: MCP Screen (reTerminal e-paper)
+version: "0.1.0"
+slug: mcp_screen
+description: Render + host + push screens to the reTerminal E1001 e-paper, over HTTP for the reSpeaker agent
+url: https://github.com/mosa-riel/mcp-screen
+arch:
+  - aarch64
+  - amd64
+init: true
+boot: auto
+startup: services
+ports:
+  8799/tcp: 8799
+ports_description:
+  8799/tcp: PNG host the reTerminal e-paper fetches (point its online_image url here)
+options:
+  reterminal_host: 192.168.18.152
+  screen_port: 8799
+  mcp_port: 8788
+schema:
+  reterminal_host: str
+  screen_port: port
+  mcp_port: port
