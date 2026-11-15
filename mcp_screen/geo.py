@@ -1,7 +1,8 @@
 """Places, routes and weather from public services (online, no API keys, no accounts).
 
-- Places in the Netherlands: PDOK Locatieserver (Kadaster), https://api.pdok.nl/bzk/locatieserver
-- Places elsewhere: Open-Meteo geocoding, https://geocoding-api.open-meteo.com
+- Places (addresses, towns, points of interest, worldwide): OpenStreetMap Nominatim,
+  https://nominatim.openstreetmap.org (usage policy: max 1 request/s, identifying User-Agent;
+  results cached); Open-Meteo geocoding as fallback, https://geocoding-api.open-meteo.com
 - Routes: OpenStreetMap routing by FOSSGIS (OSRM; car, bike, foot), https://routing.openstreetmap.de
   (public service with a fair-use policy: occasional requests only)
 - Weather: Open-Meteo forecast, https://api.open-meteo.com
@@ -13,9 +14,11 @@ keep the two in step.
 
 from __future__ import annotations
 
+import asyncio
 import math
 import os
 import re
+import time
 
 import httpx
 
@@ -73,59 +76,72 @@ async def home(cli: httpx.AsyncClient) -> tuple[str, float, float]:
     return "thuis", float(a["latitude"]), float(a["longitude"])
 
 
+_NOMINATIM_GAP = 1.1  # usage policy: at most one request per second
+_nominatim_lock = asyncio.Lock()
+_nominatim_last = 0.0
+_cache: dict[str, list[dict]] = {}
+
+
+async def candidates(cli: httpx.AsyncClient, q: str) -> list[dict]:
+    """Possible places for a name, best first: OpenStreetMap Nominatim (addresses, places and
+    points of interest worldwide, ranked by importance); Open-Meteo geocoding if that fails."""
+    key = q.lower()
+    if key in _cache:
+        return _cache[key]
+    global _nominatim_last
+    out: list[dict] = []
+    try:
+        async with _nominatim_lock:
+            wait = _NOMINATIM_GAP - (time.monotonic() - _nominatim_last)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            _nominatim_last = time.monotonic()
+            r = await cli.get("https://nominatim.openstreetmap.org/search",
+                              params={"q": q, "format": "jsonv2", "limit": 4, "accept-language": "nl"})
+        r.raise_for_status()
+        for p in r.json():
+            parts = [x.strip() for x in p.get("display_name", "").split(",")]
+            label = ", ".join(dict.fromkeys(x for x in parts[:3] + parts[-1:] if x and not x.replace(" ", "").isdigit()))
+            out.append({"label": label, "name": p.get("name") or parts[0], "lat": float(p["lat"]), "lon": float(p["lon"]),
+                        "kind": p.get("type", ""), "source": "OpenStreetMap"})
+    except (httpx.HTTPError, ValueError, KeyError):
+        pass
+    if not out:
+        try:
+            r = await cli.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": q, "count": 3, "language": "nl"})
+            r.raise_for_status()
+            for p in r.json().get("results") or []:
+                label = ", ".join(x for x in (p.get("name"), p.get("admin1"), p.get("country")) if x)
+                out.append({"label": label, "name": p.get("name", ""), "lat": float(p["latitude"]),
+                            "lon": float(p["longitude"]), "kind": "plaats", "source": "Open-Meteo"})
+        except (httpx.HTTPError, ValueError, KeyError):
+            pass
+    if out:
+        _cache[key] = out
+        if len(_cache) > 500:
+            _cache.pop(next(iter(_cache)))
+    return out
+
+
+def best(q: str, cands: list[dict]) -> dict | None:
+    """The default pick: the source's own ranking (Nominatim orders by importance). The tools
+    always name the place they used, so the model can check it and pick an alternative from
+    plaats_zoeken, or pass coordinates."""
+    return cands[0] if cands else None
+
+
 async def geocode(cli: httpx.AsyncClient, name: str) -> tuple[str, float, float]:
-    """→ (label, lat, lon). 'thuis' is zone.home; Dutch places via PDOK, else Open-Meteo."""
+    """→ (label, lat, lon). Empty or 'thuis'/'hier' is zone.home; 'lat,lon' is used as is."""
     q = (name or "").strip()
     if not q or q.lower().strip(" .!?") in HOME_WORDS:
         return await home(cli)
     m = re.fullmatch(r"\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*", q)
     if m:
         return q, float(m.group(1)), float(m.group(2))
-    has_digits = any(c.isdigit() for c in q)
-    # Addresses and postcodes: PDOK, all types. Places: Dutch towns first (woonplaats, then
-    # gemeente), else anywhere in the world (Open-Meteo), else Dutch streets etc.
-    for fq in ((None,) if has_digits else ("type:woonplaats", "type:gemeente")):
-        hit = await _pdok(cli, q, fq)
-        if hit:
-            return hit
-    world = await _open_meteo(cli, q)
-    if world:
-        return world
-    hit = None if has_digits else await _pdok(cli, q, None)
-    if hit:
-        return hit
-    raise GeoError(f"plaats '{name}' niet gevonden")
-
-
-async def _pdok(cli: httpx.AsyncClient, q: str, fq: str | None):
-    params = {"q": q, "rows": 1, "fl": "weergavenaam,centroide_ll,type,score"}
-    if fq:
-        params["fq"] = fq
-    try:
-        r = await cli.get("https://api.pdok.nl/bzk/locatieserver/search/v3_1/free", params=params)
-        r.raise_for_status()
-        docs = r.json().get("response", {}).get("docs", [])
-    except (httpx.HTTPError, ValueError):
-        return None
-    if not docs or docs[0].get("score", 0) < 5:
-        return None
-    lon, lat = map(float, re.findall(r"-?\d+\.\d+", docs[0]["centroide_ll"])[:2])
-    return docs[0]["weergavenaam"], lat, lon
-
-
-async def _open_meteo(cli: httpx.AsyncClient, q: str):
-    try:
-        r = await cli.get("https://geocoding-api.open-meteo.com/v1/search",
-                          params={"name": q, "count": 1, "language": "nl"})
-        r.raise_for_status()
-        res = r.json().get("results") or []
-    except (httpx.HTTPError, ValueError):
-        return None
-    if not res:
-        return None
-    p = res[0]
-    label = ", ".join(x for x in (p.get("name"), p.get("admin1"), p.get("country")) if x)
-    return label, float(p["latitude"]), float(p["longitude"])
+    c = best(q, await candidates(cli, q))
+    if c is None:
+        raise GeoError(f"plaats '{name}' niet gevonden")
+    return c["label"], c["lat"], c["lon"]
 
 
 async def route(cli: httpx.AsyncClient, a: tuple[float, float], b: tuple[float, float], vervoer: str) -> dict:

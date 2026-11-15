@@ -49,7 +49,7 @@ rendered in Chromium after the framework runtime settles (`TRMNL_PLUGINS_READY`)
   stitched server-side, thresholded to line art, with route line and numbered markers; fits
   the points when no zoom is given. Online at render time (tiles cached in memory).
 - `map` with `route: {van, naar, vervoer}`: the add-on looks up both places and the route itself
-  (`geo.py`, a copy of mcp-geo's: PDOK Locatieserver / Open-Meteo geocoding, FOSSGIS OSRM
+  (`geo.py`, a copy of mcp-geo's: OpenStreetMap Nominatim geocoding, FOSSGIS OSRM
   routing) and draws it with start and end markers, so the model never passes coordinates.
 - `image`: fetched server-side, dithered (Floyd-Steinberg).
 - `compass`: SVG rose with up to three arrows (direction they point to).
