@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 .uv/
 uv.lock
+# fetched at image build time (Dockerfile); for local runs see README
+mcp_screen/assets/fonts/
+mcp_screen/assets/mdi/

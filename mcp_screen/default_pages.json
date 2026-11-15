@@ -1,0 +1,58 @@
+{
+  "dashboard": {
+    "title": "",
+    "description": "Overzicht: weer nu, komende uren en dagen, stroom, gas en woonkamer",
+    "widgets": [
+      {"type": "weather_now"},
+      {"type": "forecast_days", "days": 5},
+      {"type": "forecast_hours", "hours": 4},
+      {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_consumption", "label": "stroom nu", "icon": "flash"},
+      {"type": "value", "entity_id": "sensor.zonneplan_electricity_consumption_today", "label": "stroom vandaag", "icon": "lightning-bolt"},
+      {"type": "value", "entity_id": "sensor.zonneplan_gas_consumption_today", "label": "gas vandaag", "icon": "fire"},
+      {"type": "value", "entity_id": "climate.woonkamer", "label": "woonkamer", "icon": "sofa-outline"}
+    ]
+  },
+  "weer": {
+    "title": "Weer",
+    "description": "Weer nu groot, komende 5 dagen en de komende 8 uur",
+    "widgets": [
+      {"type": "weather_now", "large": true},
+      {"type": "forecast_days", "days": 5},
+      {"type": "forecast_hours", "hours": 8, "wide": true}
+    ]
+  },
+  "energie": {
+    "title": "Energie",
+    "description": "Stroom en gas: verbruik, teruglevering, prijzen en kosten van vandaag",
+    "widgets": [
+      {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_consumption", "label": "verbruik nu", "icon": "flash"},
+      {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_production", "label": "teruglevering nu", "icon": "solar-power"},
+      {"type": "value", "entity_id": "sensor.zonneplan_current_quarter_hourly_electricity_tariff", "label": "stroomprijs", "icon": "currency-eur"},
+      {"type": "value", "entity_id": "sensor.zonneplan_current_tariff_gas", "label": "gasprijs", "icon": "currency-eur"},
+      {"type": "value", "entity_id": "sensor.zonneplan_electricity_consumption_today", "label": "stroom vandaag", "icon": "lightning-bolt"},
+      {"type": "value", "entity_id": "sensor.zonneplan_electricity_returned_today", "label": "teruggeleverd vandaag", "icon": "transmission-tower-export"},
+      {"type": "value", "entity_id": "sensor.zonneplan_gas_consumption_today", "label": "gas vandaag", "icon": "fire"},
+      {"type": "value", "entity_id": "sensor.zonneplan_electricity_delivery_costs_today", "label": "stroomkosten vandaag", "icon": "cash"},
+      {"type": "text", "entity_id": "sensor.zonneplan_status_tip", "wide": true}
+    ]
+  },
+  "binnen": {
+    "title": "Binnen",
+    "description": "Temperatuur per kamer, hier in de huiskamer, buiten, en de komende uren",
+    "widgets": [
+      {"type": "rooms", "entity_ids": ["climate.woonkamer", "climate.slaapkamer", "climate.kantoor", "climate.valentijn", "climate.julius"], "title": "Kamers"},
+      {"type": "value", "entity_id": "sensor.huiskamer_huiskamer_e_paperscherm_temperatuur", "label": "hier", "icon": "thermometer"},
+      {"type": "value", "entity_id": "sensor.huiskamer_huiskamer_e_paperscherm_luchtvochtigheid", "label": "vocht hier", "icon": "water-percent"},
+      {"type": "value", "entity_id": "climate.badkamer_thermostaat", "label": "badkamer", "icon": "shower"},
+      {"type": "value", "entity_id": "weather.forecast_home", "label": "buiten", "icon": "home-thermometer-outline"},
+      {"type": "forecast_hours", "hours": 8, "wide": true}
+    ]
+  },
+  "boodschappen": {
+    "title": "Boodschappen",
+    "description": "De boodschappenlijst",
+    "widgets": [
+      {"type": "todo", "entity_id": "todo.shopping_list", "large": true, "title": ""}
+    ]
+  }
+}

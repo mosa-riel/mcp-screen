@@ -1,0 +1,8 @@
+/* Shared by every rendered screen (dashboards and show_html): local fonts and icons only.
+   Fonts and the MDI webfont are fetched into assets/ at image build time (see Dockerfile). */
+@import url("mdi/css/materialdesignicons.min.css");
+@font-face { font-family: Inter; font-weight: 500; src: url("fonts/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-weight: 700; src: url("fonts/inter-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: Inter; font-weight: 800; src: url("fonts/inter-latin-800-normal.woff2") format("woff2"); }
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 800px; height: 480px; overflow: hidden; background: #fff; color: #000; font-family: Inter, "DejaVu Sans", sans-serif; font-weight: 500; }
