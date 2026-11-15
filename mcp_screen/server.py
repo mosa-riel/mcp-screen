@@ -45,6 +45,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 import cards
+import geo
 import maps
 import render
 import widgets as wg
@@ -186,8 +187,10 @@ class Screen:
                 height = int(cards._clamp(n.get("height", 300), 60, 440, 300))
                 width = int(cards._clamp(n.get("width", 360 if narrow else 740), 100, 760, 740))
                 if t == "map":
-                    png = await maps.render_map(width, height, n.get("center"), n.get("zoom"),
-                                                n.get("markers"), n.get("path"))
+                    markers, path = n.get("markers"), n.get("path")
+                    if isinstance(n.get("route"), dict):
+                        markers, path = await _route_points(n["route"])
+                    png = await maps.render_map(width, height, n.get("center"), n.get("zoom"), markers, path)
                     assets[id(n)] = cards.data_uri_png(png)
                 elif t == "image" and n.get("url"):
                     assets[id(n)] = cards.data_uri_png(await maps.render_photo(n["url"], width, height))
@@ -285,6 +288,17 @@ class Screen:
             await self.show(self.view)
         except Exception as err:  # noqa: BLE001
             print(f"[screen] live redraw failed: {err}", flush=True)
+
+
+async def _route_points(spec: dict) -> tuple[list[dict], list]:
+    """A map block's {"van", "naar", "vervoer"} → (markers, path) via the public router (geo.py)."""
+    async with httpx.AsyncClient(timeout=12, headers=geo.UA, follow_redirects=True) as cli:
+        a_label, alat, alon = await geo.geocode(cli, str(spec.get("van", "thuis")))
+        b_label, blat, blon = await geo.geocode(cli, str(spec.get("naar", "")))
+        rt = await geo.route(cli, (alat, alon), (blat, blon), str(spec.get("vervoer", "fiets")))
+    short = lambda s: s.split(",")[0]  # noqa: E731 - "Sittard, Sittard-Geleen, Limburg" → "Sittard"
+    return ([{"lat": alat, "lon": alon, "label": short(a_label)}, {"lat": blat, "lon": blon, "label": short(b_label)}],
+            rt["path"])
 
 
 async def refresh_device() -> str:
