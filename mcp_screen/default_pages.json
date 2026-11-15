@@ -1,13 +1,13 @@
 {
   "dashboard": {
     "title": "",
-    "description": "Overzicht: weer nu, komende uren en dagen, stroom, gas en woonkamer",
+    "description": "Overzicht: weer nu, komende uren en dagen, stroom, zonnepanelen, gas en woonkamer",
     "widgets": [
       {"type": "weather_now"},
       {"type": "forecast_days", "days": 5},
       {"type": "forecast_hours", "hours": 4},
       {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_consumption", "label": "stroom nu", "icon": "flash"},
-      {"type": "value", "entity_id": "sensor.zonneplan_electricity_consumption_today", "label": "stroom vandaag", "icon": "lightning-bolt"},
+      {"type": "value", "entity_id": "sensor.zonnepanelen_vermogen", "label": "zon nu", "icon": "solar-power-variant"},
       {"type": "value", "entity_id": "sensor.zonneplan_gas_consumption_today", "label": "gas vandaag", "icon": "fire"},
       {"type": "value", "entity_id": "climate.woonkamer", "label": "woonkamer", "icon": "sofa-outline"}
     ]
@@ -23,17 +23,19 @@
   },
   "energie": {
     "title": "Energie",
-    "description": "Stroom en gas: verbruik, teruglevering, prijzen en kosten van vandaag",
+    "description": "Stroom, zonnepanelen en gas: verbruik, opbrengst, teruglevering, prijzen en kosten van vandaag",
     "widgets": [
       {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_consumption", "label": "verbruik nu", "icon": "flash"},
-      {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_production", "label": "teruglevering nu", "icon": "solar-power"},
+      {"type": "value", "entity_id": "sensor.zonnepanelen_vermogen", "label": "zon nu", "icon": "solar-power-variant"},
+      {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_production", "label": "teruglevering nu", "icon": "transmission-tower-export"},
       {"type": "value", "entity_id": "sensor.zonneplan_current_quarter_hourly_electricity_tariff", "label": "stroomprijs", "icon": "currency-eur"},
-      {"type": "value", "entity_id": "sensor.zonneplan_current_tariff_gas", "label": "gasprijs", "icon": "currency-eur"},
       {"type": "value", "entity_id": "sensor.zonneplan_electricity_consumption_today", "label": "stroom vandaag", "icon": "lightning-bolt"},
       {"type": "value", "entity_id": "sensor.zonneplan_electricity_returned_today", "label": "teruggeleverd vandaag", "icon": "transmission-tower-export"},
       {"type": "value", "entity_id": "sensor.zonneplan_gas_consumption_today", "label": "gas vandaag", "icon": "fire"},
+      {"type": "value", "entity_id": "sensor.zonneplan_current_tariff_gas", "label": "gasprijs", "icon": "currency-eur"},
       {"type": "value", "entity_id": "sensor.zonneplan_electricity_delivery_costs_today", "label": "stroomkosten vandaag", "icon": "cash"},
-      {"type": "text", "entity_id": "sensor.zonneplan_status_tip", "wide": true}
+      {"type": "value", "entity_id": "sensor.zonneplan_gas_delivery_costs_today", "label": "gaskosten vandaag", "icon": "cash"},
+      {"type": "text", "entity_id": "sensor.zonneplan_status_tip"}
     ]
   },
   "binnen": {
