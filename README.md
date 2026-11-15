@@ -44,7 +44,8 @@ under a 60 px header), first fit in order; what does not fit is left out and rep
 `price_chart` reads the entity's `forecast` attribute (entries with `start_date` and
 `price_tax_included.amount` in 1e-7 €, as Zonneplan provides; `electricity_price` or a plain
 `price` work too), averages per hour from the current hour on and draws bars (current hour
-solid, the rest hatched) scaled from just under the cheapest hour.
+solid, the rest hatched) scaled from just under the cheapest hour. "nu" in its header is the
+entity state (this quarter's price, like a value tile), "min" the cheapest hourly average.
 
 Values are formatted per domain: lights show brightness % or aan/uit, covers their position,
 climate the current temperature, money as `€ 1,23`. An explicit empty `title` hides a

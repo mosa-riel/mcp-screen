@@ -341,7 +341,8 @@ def _price_chart(w: dict, ctx: Ctx, cols: int, rows: int) -> str:
     """Bars of the coming hours' electricity price (hourly averages of the quarter prices in
     the entity's `forecast` attribute). The current hour is solid, the rest hatched."""
     eid = w.get("entity_id") or PRICE_ENTITY
-    forecast = (ctx.states.get(eid) or {}).get("attributes", {}).get("forecast") or []
+    st = ctx.states.get(eid) or {}
+    forecast = st.get("attributes", {}).get("forecast") or []
     hour0 = ctx.now.replace(minute=0, second=0, microsecond=0)
     buckets: dict[datetime, list[float]] = {}
     for f in forecast:
@@ -357,6 +358,9 @@ def _price_chart(w: dict, ctx: Ctx, cols: int, rows: int) -> str:
         return '<h2>Stroomprijs</h2><div class="msg">Geen prijzen</div>'
     vals = [sum(buckets[h]) / len(buckets[h]) for h in hours]
     cheap = min(range(len(vals)), key=vals.__getitem__)
+    # "nu" is this quarter's price (the entity state, as a value tile shows it); the bars are
+    # hourly averages.
+    now_price = float(st["state"]) if is_numeric(st.get("state")) else vals[0]
     width, height = cols * 200 - 28, rows * 140 - 20 - 22 - 16
     # Scale from just under the cheapest hour (not from € 0) so the differences show; with
     # negative prices the zero line is in range anyway.
@@ -382,7 +386,7 @@ def _price_chart(w: dict, ctx: Ctx, cols: int, rows: int) -> str:
            f'</pattern></defs><line x1="0" y1="{min(y(0), height):.1f}" x2="{width}" y2="{min(y(0), height):.1f}" stroke="#000" stroke-width="2"/>'
            f'{"".join(bars)}{"".join(labels)}</svg>')
     head = (f'<div class="pc-head"><h2>{esc(w["title"] if "title" in w else "Stroomprijs")}</h2>'
-            f'<span>nu <b>€ {nl_num(vals[0], 2)}</b> · min <b>€ {nl_num(vals[cheap], 2)}</b> {hours[cheap]:%H}u</span></div>')
+            f'<span>nu <b>€ {nl_num(now_price, 2)}</b> · min <b>€ {nl_num(vals[cheap], 2)}</b> {hours[cheap]:%H}u</span></div>')
     return head + svg
 
 
