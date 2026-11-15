@@ -8,10 +8,10 @@
 - Routes: OpenStreetMap routing by FOSSGIS (OSRM; car, bike, foot), https://routing.openstreetmap.de
   (public service with a fair-use policy: occasional requests only)
 - Weather: Open-Meteo forecast, https://api.open-meteo.com
+- Road works and closures: NDW open data (ndw.py)
 - "thuis": Home Assistant's zone.home (through the Supervisor proxy, or HA_URL + HA_TOKEN).
 
-Copy of mcp-geo/mcp_geo/geo.py (github.com/mosa-riel/mcp-geo) for map blocks with a "route";
-keep the two in step.
+mcp-screen keeps a copy of geocode/route for its map blocks; keep the two in step.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import time
 
 import httpx
 
-UA = {"User-Agent": "mcp-screen (reTerminal e-paper; https://github.com/mosa-riel/mcp-screen)"}
+UA = {"User-Agent": "mcp-geo (reSpeaker agent; https://github.com/mosa-riel/mcp-geo)"}
 # Words for the home address (Home Assistant's zone.home); an empty place means home too.
 HOME_WORDS = {"thuis", "huis", "home", "hier", "mijn huis", "bij mij thuis", "bij mij", "bij ons", "vanaf hier",
               "vanaf thuis", "van thuis", "mijn adres", "ons huis", "huidige locatie", "mijn locatie", "hier in huis"}
@@ -173,12 +173,15 @@ async def geocode(cli: httpx.AsyncClient, name: str) -> tuple[str, float, float]
     return c["label"], c["lat"], c["lon"]
 
 
-async def route(cli: httpx.AsyncClient, a: tuple[float, float], b: tuple[float, float], vervoer: str) -> dict:
-    """OSRM route → {distance_m, duration_s, path: [[lat, lon], ...] (simplified)}."""
+async def route(cli: httpx.AsyncClient, a: tuple[float, float], b: tuple[float, float], vervoer: str,
+                full: bool = False) -> dict:
+    """OSRM route → {distance_m, duration_s, path: [[lat, lon], ...] (simplified), via: main roads};
+    with full=True also coords: every point (to match road works along it)."""
     prof = PROFILES.get(vervoer, "routed-bike")
     url = (f"https://routing.openstreetmap.de/{prof}/route/v1/driving/"
            f"{a[1]:.6f},{a[0]:.6f};{b[1]:.6f},{b[0]:.6f}")
-    r = await cli.get(url, params={"overview": "simplified", "geometries": "geojson"})
+    r = await cli.get(url, params={"overview": "full" if full else "simplified", "geometries": "geojson",
+                                   "steps": "true" if full else "false"})
     r.raise_for_status()
     data = r.json()
     if data.get("code") != "Ok" or not data.get("routes"):
@@ -189,7 +192,18 @@ async def route(cli: httpx.AsyncClient, a: tuple[float, float], b: tuple[float, 
     path = [[round(c[1], 5), round(c[0], 5)] for c in coords[::step]]
     if path[-1] != [round(coords[-1][1], 5), round(coords[-1][0], 5)]:
         path.append([round(coords[-1][1], 5), round(coords[-1][0], 5)])
-    return {"distance_m": rt["distance"], "duration_s": rt["duration"], "path": path}
+    out = {"distance_m": rt["distance"], "duration_s": rt["duration"], "path": path,
+           "via": ", ".join(x for x in (leg.get("summary", "") for leg in rt.get("legs", [])) if x)}
+    if full:
+        out["coords"] = [(c[1], c[0]) for c in coords]
+        # The street name and road number per segment of coords (steps share their end points).
+        names: list[set[str]] = []
+        for leg in rt.get("legs", []):
+            for st in leg.get("steps", []):
+                n = max(0, len(st.get("geometry", {}).get("coordinates", [])) - 1)
+                names += [{x.strip() for x in f"{st.get('name', '')};{st.get('ref', '')}".split(";") if x.strip()}] * n
+        out["names"] = (names + [set()] * len(coords))[:max(0, len(coords) - 1)]
+    return out
 
 
 async def forecast(cli: httpx.AsyncClient, lat: float, lon: float, days: int) -> dict:
