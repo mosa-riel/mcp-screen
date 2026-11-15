@@ -9,12 +9,15 @@ ENV MCP_HOST=0.0.0.0 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1
 
+# libatomic1: the node binary bundled with playwright needs it (not in the slim base image).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN pip install "mcp>=1.27.2" "httpx>=0.27" "pillow>=10.0" "aioesphomeapi>=24.0" "playwright>=1.40" "websockets>=13"
+# Pinned: an unpinned install pulled mcp 2.x (FastMCP renamed) and a playwright whose node
+# needs libatomic. Bump deliberately and test the image (README, Local development).
+RUN pip install "mcp==1.30.0" "httpx==0.28.1" "pillow==13.0.0" "aioesphomeapi==46.30.0" "playwright==1.65.2" "websockets==17.4"
 # Headless Chromium for rendering (HTML/CSS → 1-bit screen). --with-deps apt-installs the
 # browser's system libraries. Big layer (~400MB) — that's the cost of full HTML rendering.
 RUN playwright install --with-deps chromium
