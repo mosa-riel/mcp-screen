@@ -124,7 +124,7 @@ Supervisor proxy (`homeassistant_api: true`): `GET /states`, `weather.get_foreca
 Bridged network, so the agent reaches the MCP at `http://<repo-hash>-mcp-screen:8788/mcp`. The
 HTTP host (`8799`) is published to the host LAN via `ports` so the reTerminal can fetch it.
 The device's ESPHome API (`:6053`) is reached **outbound by IP** — bridged containers can't do
-mDNS, so set `reterminal_host` to the device's reserved IP (e.g. `192.168.18.152`). After an
+mDNS, so set `reterminal_host` to the device's reserved IP (e.g. `192.168.1.60`). After an
 update, restart the agent so it picks up new tools (it connects to MCP servers at startup).
 
 ## Options / env
