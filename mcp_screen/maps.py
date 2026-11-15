@@ -17,7 +17,12 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 TILE = 256
 PDOK = "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png"
+# Outside the Netherlands PDOK has no tiles: OpenStreetMap's standard tiles (tile usage policy:
+# light use with an identifying User-Agent, attribution on the map).
+OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+NL = (50.70, 53.60, 3.30, 7.25)  # lat_min, lat_max, lon_min, lon_max
 THRESHOLD = 225  # "grijs": fills are ~230-245, roads, edges and names darker
+OSM_THRESHOLD = 190  # OSM colours in grey: land ~240, water/forest ~200-215, roads and names darker
 UA = {"User-Agent": "mcp-screen (reTerminal e-paper; https://github.com/mosa-riel/mcp-screen)"}
 _tiles: dict[tuple[int, int, int], Image.Image] = {}
 
@@ -29,11 +34,11 @@ def _px(lat: float, lon: float, z: int) -> tuple[float, float]:
     return x, y
 
 
-async def _tile(cli: httpx.AsyncClient, z: int, x: int, y: int) -> Image.Image:
-    key = (z, x, y)
+async def _tile(cli: httpx.AsyncClient, z: int, x: int, y: int, src: str = PDOK) -> Image.Image:
+    key = (src, z, x, y)
     if key not in _tiles:
         try:
-            r = await cli.get(PDOK.format(z=z, x=x, y=y))
+            r = await cli.get(src.format(z=z, x=x, y=y))
             r.raise_for_status()
             tile = Image.open(io.BytesIO(r.content)).convert("RGBA")
             white = Image.new("RGBA", tile.size, (255, 255, 255, 255))
@@ -86,9 +91,13 @@ async def render_map(width: int, height: int, center: dict | None = None, zoom: 
         cx, cy = _px(52.3, 6.75, z)
     x0, y0 = cx - width / 2, cy - height / 2
     tx0, ty0, tx1, ty1 = int(x0 // TILE), int(y0 // TILE), int((x0 + width) // TILE), int((y0 + height) // TILE)
+    lat_c = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * cy / (TILE * 2 ** z)))))
+    lon_c = cx / (TILE * 2 ** z) * 360 - 180
+    in_nl = NL[0] <= lat_c <= NL[1] and NL[2] <= lon_c <= NL[3]
+    src, credit, thr = (PDOK, "PDOK / Kadaster", THRESHOLD) if in_nl else (OSM, "© OpenStreetMap", OSM_THRESHOLD)
     async with httpx.AsyncClient(timeout=10, headers=UA) as cli:
         coords = [(tx, ty) for ty in range(ty0, ty1 + 1) for tx in range(tx0, tx1 + 1)]
-        tiles = await asyncio.gather(*(_tile(cli, z, tx, ty) for tx, ty in coords))
+        tiles = await asyncio.gather(*(_tile(cli, z, tx, ty, src) for tx, ty in coords))
     canvas = Image.new("L", ((tx1 - tx0 + 1) * TILE, (ty1 - ty0 + 1) * TILE), 255)
     for (tx, ty), im in zip(coords, tiles):
         canvas.paste(im, ((tx - tx0) * TILE, (ty - ty0) * TILE))
@@ -96,7 +105,7 @@ async def render_map(width: int, height: int, center: dict | None = None, zoom: 
     img = canvas.crop((ox, oy, ox + width, oy + height))
     # The "grijs" style is light grey with darker roads and labels: stretch, then threshold so
     # roads, water edges and names stay and the fills go white.
-    img = img.point(lambda v: 255 if v > THRESHOLD else 0)
+    img = img.point(lambda v: 255 if v > thr else 0)
     img = img.convert("RGB")
     d = ImageDraw.Draw(img)
     to = lambda la, lo: (_px(la, lo, z)[0] - x0, _px(la, lo, z)[1] - y0)  # noqa: E731
@@ -114,7 +123,7 @@ async def render_map(width: int, height: int, center: dict | None = None, zoom: 
             d.rectangle((x + 16, y - 13, x + 24 + tw, y + 13), fill="white", outline="black", width=2)
             d.text((x + 20, y), str(m["label"]), fill="black", font=f, anchor="lm")
     d.rectangle((0, 0, width - 1, height - 1), outline="black", width=2)
-    d.text((width - 6, height - 4), "PDOK / Kadaster", fill="black", font=_font(11), anchor="rd")
+    d.text((width - 6, height - 4), credit, fill="black", font=_font(11), anchor="rd")
     out = io.BytesIO()
     img.convert("1", dither=Image.Dither.NONE).save(out, "PNG", optimize=True)
     return out.getvalue()

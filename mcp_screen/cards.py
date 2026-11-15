@@ -66,7 +66,7 @@ ELEMENTEN (tekst of live HA-waarde via "entity_id"):
       strokeDash of shape, niet met kleur.
   {"type":"map","height":200-440,"zoom":8-16,
       "center":{"lat":52.3,"lon":6.75} en/of "markers":[{"lat":..,"lon":..,"label":".."}],
-      "path":[[lat,lon],...]}       PDOK-kaart (alleen Nederland); zonder zoom past hij zich aan
+      "path":[[lat,lon],...]}       kaart (Nederland: PDOK, elders: OpenStreetMap); zonder zoom past hij zich aan
   {"type":"map","height":300,"route":{"van":"thuis","naar":"Sittard","vervoer":"fiets|auto|lopen"}}
       kaart met de gereden route (OpenStreetMap-routeplanner) en begin/eind gemarkeerd
   {"type":"compass","height":160-400,

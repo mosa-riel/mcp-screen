@@ -44,7 +44,8 @@ rendered in Chromium after the framework runtime settles (`TRMNL_PLUGINS_READY`)
 - `chart`: Vega-Lite spec (BSD), rendered to SVG in the page; with `entity_ids` + `hours` the
   add-on supplies Home Assistant history as dataset `ha` (`t`, `v`, `naam`), and without a
   spec draws a line chart of it. Black only, series told apart by dash.
-- `map`: PDOK BRT-Achtergrondkaart raster tiles ("grijs"; Netherlands only, public, no key)
+- `map`: PDOK BRT-Achtergrondkaart raster tiles ("grijs"; public, no key); outside the Netherlands
+  OpenStreetMap standard tiles (tile usage policy, attribution on the map), thresholded at 190;
   stitched server-side, thresholded to line art, with route line and numbered markers; fits
   the points when no zoom is given. Online at render time (tiles cached in memory).
 - `map` with `route: {van, naar, vervoer}`: the add-on looks up both places and the route itself
