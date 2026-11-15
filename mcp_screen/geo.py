@@ -8,10 +8,10 @@
 - Routes: OpenStreetMap routing by FOSSGIS (OSRM; car, bike, foot), https://routing.openstreetmap.de
   (public service with a fair-use policy: occasional requests only)
 - Weather: Open-Meteo forecast, https://api.open-meteo.com
-- Road works and closures: NDW open data (ndw.py)
 - "thuis": Home Assistant's zone.home (through the Supervisor proxy, or HA_URL + HA_TOKEN).
 
-mcp-screen keeps a copy of geocode/route for its map blocks; keep the two in step.
+Copy of mcp-geo/mcp_geo/geo.py (github.com/mosa-riel/mcp-geo) for map blocks with a "route";
+keep the two in step.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import time
 
 import httpx
 
-UA = {"User-Agent": "mcp-geo (reSpeaker agent; https://github.com/mosa-riel/mcp-geo)"}
+UA = {"User-Agent": "mcp-screen (reTerminal e-paper; https://github.com/mosa-riel/mcp-screen)"}
 # Words for the home address (Home Assistant's zone.home); an empty place means home too.
 HOME_WORDS = {"thuis", "huis", "home", "hier", "mijn huis", "bij mij thuis", "bij mij", "bij ons", "vanaf hier",
               "vanaf thuis", "van thuis", "mijn adres", "ons huis", "huidige locatie", "mijn locatie", "hier in huis"}
