@@ -45,7 +45,7 @@ DOMAIN_ICON = {"light": "lightbulb", "switch": "power-socket-eu", "cover": "wind
 
 # type → (cols, rows); some types grow with an option (see _size).
 SIZES = {"weather_now": (2, 1), "forecast_hours": (2, 1), "forecast_days": (2, 2), "value": (1, 1),
-         "list": (2, 1), "rooms": (2, 2), "todo": (2, 2), "text": (2, 1)}
+         "list": (2, 1), "rooms": (2, 2), "todo": (2, 2), "text": (2, 1), "price_chart": (2, 1)}
 
 
 def esc(s) -> str:
@@ -149,7 +149,7 @@ def _size(w: dict) -> tuple[int, int]:
         return 2, 2
     if t == "list" and len(_ids(w)) > (2 if w.get("title") else 3):
         return 2, 2
-    if t == "forecast_hours" and w.get("wide"):
+    if t in ("forecast_hours", "price_chart") and w.get("wide"):
         return 4, 1
     if t in ("text", "todo") and w.get("large"):
         return 4, 3
@@ -189,6 +189,8 @@ def needs(widgets: list[dict], weather_entity: str, states: dict | None = None) 
             need["entities"].add(eid)
         elif t == "text" and w.get("entity_id"):
             need["entities"].add(w["entity_id"])
+        elif t == "price_chart":
+            need["entities"].add(w.get("entity_id") or PRICE_ENTITY)
     return need
 
 
@@ -320,8 +322,73 @@ def _text(w: dict, ctx: Ctx, cols: int, rows: int) -> str:
     return f'{title}<div class="txt{" big" if rows == 3 else ""}">{esc(text)}</div>'
 
 
+PRICE_ENTITY = "sensor.zonneplan_current_quarter_hourly_electricity_tariff"
+
+
+def _price(f: dict) -> float | None:
+    """€/kWh from one forecast entry (Zonneplan: amounts in 1e-7 €; or a plain price)."""
+    for key in ("price_tax_included", "electricity_price"):
+        v = f.get(key)
+        if isinstance(v, dict):
+            v = v.get("amount")
+        if isinstance(v, (int, float)):
+            return v / 1e7
+    v = f.get("price")
+    return float(v) if isinstance(v, (int, float)) else None
+
+
+def _price_chart(w: dict, ctx: Ctx, cols: int, rows: int) -> str:
+    """Bars of the coming hours' electricity price (hourly averages of the quarter prices in
+    the entity's `forecast` attribute). The current hour is solid, the rest hatched."""
+    eid = w.get("entity_id") or PRICE_ENTITY
+    forecast = (ctx.states.get(eid) or {}).get("attributes", {}).get("forecast") or []
+    hour0 = ctx.now.replace(minute=0, second=0, microsecond=0)
+    buckets: dict[datetime, list[float]] = {}
+    for f in forecast:
+        start = f.get("start_date") or f.get("datetime") or f.get("start")
+        price = _price(f)
+        if not start or price is None:
+            continue
+        t = local(start).replace(minute=0, second=0, microsecond=0)
+        if t >= hour0:
+            buckets.setdefault(t, []).append(price)
+    hours = sorted(buckets)[: max(2, min(int(w.get("hours", 12 * cols // 2)), 48))]
+    if not hours:
+        return '<h2>Stroomprijs</h2><div class="msg">Geen prijzen</div>'
+    vals = [sum(buckets[h]) / len(buckets[h]) for h in hours]
+    cheap = min(range(len(vals)), key=vals.__getitem__)
+    width, height = cols * 200 - 28, rows * 140 - 20 - 22 - 16
+    # Scale from just under the cheapest hour (not from € 0) so the differences show; with
+    # negative prices the zero line is in range anyway.
+    hi, low = max(vals), min(vals)
+    lo = low - 0.5 * (hi - low) if low > 0 else low
+    lo = max(lo, 0.0) if low > 0 else lo
+    hi = hi if hi > lo else lo + 0.01
+    y = lambda v: height * (hi - v) / (hi - lo)  # noqa: E731
+    step = width / len(vals)
+    bars, labels = [], []
+    every = 3 if len(vals) <= 16 else 4
+    for i, (h, v) in enumerate(zip(hours, vals)):
+        base_v = 0.0 if lo < 0 else lo
+        x, top, base = i * step + 1, min(y(v), y(base_v)), max(y(v), y(base_v))
+        fill = "#000" if i == 0 else "url(#hatch)"
+        bars.append(f'<rect x="{x:.1f}" y="{top:.1f}" width="{step - 3:.1f}" height="{max(base - top, 2):.1f}" '
+                    f'fill="{fill}" stroke="#000" stroke-width="2"/>')
+        if i % every == 0:
+            labels.append(f'<text x="{x + (step - 3) / 2:.1f}" y="{height + 15}" text-anchor="middle">{h:%H}</text>')
+    svg = (f'<svg width="{width}" height="{height + 17}" viewBox="0 0 {width} {height + 17}" font-size="13" '
+           f'font-family="Inter" font-weight="700"><defs><pattern id="hatch" width="5" height="5" '
+           f'patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="5" fill="#000"/>'
+           f'</pattern></defs><line x1="0" y1="{min(y(0), height):.1f}" x2="{width}" y2="{min(y(0), height):.1f}" stroke="#000" stroke-width="2"/>'
+           f'{"".join(bars)}{"".join(labels)}</svg>')
+    head = (f'<div class="pc-head"><h2>{esc(w["title"] if "title" in w else "Stroomprijs")}</h2>'
+            f'<span>nu <b>€ {nl_num(vals[0], 2)}</b> · min <b>€ {nl_num(vals[cheap], 2)}</b> {hours[cheap]:%H}u</span></div>')
+    return head + svg
+
+
 BODY = {"weather_now": _weather_now, "forecast_hours": _forecast_hours, "forecast_days": _forecast_days,
-        "value": _value, "list": _list, "rooms": _rooms, "todo": _todo, "text": _text}
+        "value": _value, "list": _list, "rooms": _rooms, "todo": _todo, "text": _text,
+        "price_chart": _price_chart}
 
 
 def page_html(title: str, widgets: list[dict], ctx: Ctx, asset_base: str) -> tuple[str, list[dict]]:

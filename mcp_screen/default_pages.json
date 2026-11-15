@@ -23,7 +23,7 @@
   },
   "energie": {
     "title": "Energie",
-    "description": "Stroom, zonnepanelen en gas: verbruik, opbrengst, teruglevering, prijzen en kosten van vandaag",
+    "description": "Stroom, zonnepanelen en gas: verbruik, opbrengst, teruglevering, prijzen, kosten van vandaag en de stroomprijs van de komende uren",
     "widgets": [
       {"type": "value", "entity_id": "sensor.connect_energiemeter_electricity_consumption", "label": "verbruik nu", "icon": "flash"},
       {"type": "value", "entity_id": "sensor.zonnepanelen_vermogen", "label": "zon nu", "icon": "solar-power-variant"},
@@ -35,7 +35,7 @@
       {"type": "value", "entity_id": "sensor.zonneplan_current_tariff_gas", "label": "gasprijs", "icon": "currency-eur"},
       {"type": "value", "entity_id": "sensor.zonneplan_electricity_delivery_costs_today", "label": "stroomkosten vandaag", "icon": "cash"},
       {"type": "value", "entity_id": "sensor.zonneplan_gas_delivery_costs_today", "label": "gaskosten vandaag", "icon": "cash"},
-      {"type": "text", "entity_id": "sensor.zonneplan_status_tip"}
+      {"type": "price_chart", "hours": 12}
     ]
   },
   "binnen": {

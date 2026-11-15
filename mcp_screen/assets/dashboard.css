@@ -48,3 +48,6 @@ h2 { font-size: 17px; font-weight: 800; text-transform: uppercase; letter-spacin
 .txt.big { font-size: 30px; line-height: 1.3; white-space: pre-line; }
 .t-text { display: flex; flex-direction: column; justify-content: center; }
 .t-todo .li { font-size: 22px; }
+.pc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; white-space: nowrap; margin-bottom: 4px; }
+.pc-head span { font-size: 14px; }
+.pc-head b { font-weight: 800; }

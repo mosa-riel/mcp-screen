@@ -39,6 +39,12 @@ under a 60 px header), first fit in order; what does not fit is left out and rep
 | `rooms` | 2x2 | `entity_ids` (climate; default all), `title` |
 | `todo` | 2x2 (`large` 4x3) | `entity_id` (default `todo.shopping_list`), `title` |
 | `text` | 2x1 (`wide` 4x1, `large` 4x3) | `text` or `entity_id` (shows its state), `title` |
+| `price_chart` | 2x1 (`wide` 4x1) | `entity_id` (default the Zonneplan quarter-hour tariff sensor), `hours` (12, wide 24), `title` |
+
+`price_chart` reads the entity's `forecast` attribute (entries with `start_date` and
+`price_tax_included.amount` in 1e-7 €, as Zonneplan provides; `electricity_price` or a plain
+`price` work too), averages per hour from the current hour on and draws bars (current hour
+solid, the rest hatched) scaled from just under the cheapest hour.
 
 Values are formatted per domain: lights show brightness % or aan/uit, covers their position,
 climate the current temperature, money as `€ 1,23`. An explicit empty `title` hides a

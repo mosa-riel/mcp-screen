@@ -378,6 +378,8 @@ async def show_dashboard(widgets: list[dict] | str, title: str = "", save_as: st
     - {"type":"todo","entity_id":"todo.shopping_list"} lijst, 2x2; "large":true hele scherm
     - {"type":"text","text":"...","title":"..."} tekst, 2x1; "wide":true 4x1; "large":true
       hele scherm
+    - {"type":"price_chart","hours":12} grafiek van de stroomprijs per uur voor de komende
+      uren (Zonneplan), 2x1; "wide":true 4x1 tot 24 uur
     title = kop bovenaan (leeg = datum). Gebruik alleen entity_ids die je kent (zoek ze op).
     save_as = naam om het te bewaren als vast scherm (komt dan ook onder de knoppen van het
     scherm en in list_pages; dezelfde naam overschrijft), description = korte omschrijving."""
