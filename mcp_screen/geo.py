@@ -2,7 +2,9 @@
 
 - Places (addresses, towns, points of interest, worldwide): OpenStreetMap Nominatim,
   https://nominatim.openstreetmap.org (usage policy: max 1 request/s, identifying User-Agent;
-  results cached); Open-Meteo geocoding as fallback, https://geocoding-api.open-meteo.com
+  results cached); then PDOK Locatieserver (fuzzy search in Dutch addresses, streets and towns,
+  catches misheard names), https://api.pdok.nl/bzk/locatieserver; then Open-Meteo geocoding,
+  https://geocoding-api.open-meteo.com
 - Routes: OpenStreetMap routing by FOSSGIS (OSRM; car, bike, foot), https://routing.openstreetmap.de
   (public service with a fair-use policy: occasional requests only)
 - Weather: Open-Meteo forecast, https://api.open-meteo.com
@@ -84,7 +86,8 @@ _cache: dict[str, list[dict]] = {}
 
 async def candidates(cli: httpx.AsyncClient, q: str) -> list[dict]:
     """Possible places for a name, best first: OpenStreetMap Nominatim (addresses, places and
-    points of interest worldwide, ranked by importance); Open-Meteo geocoding if that fails."""
+    points of interest worldwide, ranked by importance); if that finds nothing, similar Dutch
+    names from PDOK (marked approx); then Open-Meteo geocoding."""
     key = q.lower()
     if key in _cache:
         return _cache[key]
@@ -106,6 +109,30 @@ async def candidates(cli: httpx.AsyncClient, q: str) -> list[dict]:
                         "kind": p.get("type", ""), "source": "OpenStreetMap"})
     except (httpx.HTTPError, ValueError, KeyError):
         pass
+    if not out:
+        # Nominatim matches names exactly. PDOK searches Dutch addresses, streets and towns with
+        # fuzzy terms (up to two letters off), so a misheard name still finds similar ones; results
+        # in a town named in the query go first. These are marked approximate.
+        words = [w.strip(",.") for w in q.split() if w.strip(",.")]
+        fuzzy = " ".join(w + "~" if len(w) >= 4 and not w.isdigit() else w for w in words)
+        try:
+            r = await cli.get("https://api.pdok.nl/bzk/locatieserver/search/v3_1/free",
+                              params={"q": fuzzy, "rows": 6, "fq": "type:(weg OR adres OR woonplaats OR gemeente)",
+                                      "fl": "weergavenaam,centroide_ll,type"})
+            r.raise_for_status()
+            lower = {w.lower() for w in words}
+            docs = r.json().get("response", {}).get("docs", [])
+            docs.sort(key=lambda d: not lower & {w.strip(",").lower() for w in d["weergavenaam"].split()[1:]})
+            for d in docs:
+                if any(c["label"] == d["weergavenaam"] for c in out):
+                    continue
+                lon, lat = map(float, re.findall(r"-?\d+\.\d+", d["centroide_ll"])[:2])
+                name = d["weergavenaam"].split(",")[0]
+                exact = all(w.lower() in d["weergavenaam"].lower() for w in words)
+                out.append({"label": d["weergavenaam"], "name": name, "lat": lat, "lon": lon, "kind": d.get("type", ""),
+                            "source": "PDOK", "approx": not exact})
+        except (httpx.HTTPError, ValueError, KeyError):
+            pass
     if not out:
         try:
             r = await cli.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": q, "count": 3, "language": "nl"})
@@ -141,6 +168,8 @@ async def geocode(cli: httpx.AsyncClient, name: str) -> tuple[str, float, float]
     c = best(q, await candidates(cli, q))
     if c is None:
         raise GeoError(f"plaats '{name}' niet gevonden")
+    if c.get("approx"):  # say so, so the answer does not claim the asked-for place
+        return f"{c['label']} (gelijkende naam, '{name}' zelf niet gevonden)", c["lat"], c["lon"]
     return c["label"], c["lat"], c["lon"]
 
 

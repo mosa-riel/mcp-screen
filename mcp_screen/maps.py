@@ -1,8 +1,9 @@
 """Maps and photos for cards, prepared server-side as 1-bit PNGs (no WebGL in the browser).
 
 Maps: PDOK BRT-Achtergrondkaart raster tiles ("grijs", Web Mercator XYZ, Netherlands only;
-public, no key, https://www.pdok.nl), stitched, thresholded to black/white, with an optional
-route line and numbered markers drawn on top. Tiles are cached in memory.
+public, no key, https://www.pdok.nl), stitched and redrawn in a 1-bit map style (outlined
+blocks and streets, dotted fills, names with a white halo), with an optional route line and
+numbered markers drawn on top. Tiles are cached in memory.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import math
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 TILE = 256
 PDOK = "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{z}/{x}/{y}.png"
@@ -21,7 +22,6 @@ PDOK = "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/grijs/EPSG:3857/{
 # light use with an identifying User-Agent, attribution on the map).
 OSM = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 NL = (50.70, 53.60, 3.30, 7.25)  # lat_min, lat_max, lon_min, lon_max
-THRESHOLD = 225  # "grijs": fills are ~230-245, roads, edges and names darker
 OSM_THRESHOLD = 190  # OSM colours in grey: land ~240, water/forest ~200-215, roads and names darker
 UA = {"User-Agent": "mcp-screen (reTerminal e-paper; https://github.com/mosa-riel/mcp-screen)"}
 _tiles: dict[tuple[int, int, int], Image.Image] = {}
@@ -48,6 +48,37 @@ async def _tile(cli: httpx.AsyncClient, z: int, x: int, y: int, src: str = PDOK)
         if len(_tiles) > 400:
             _tiles.pop(next(iter(_tiles)))
     return _tiles[key]
+
+
+def _mask(v: Image.Image, lo: int, hi: int) -> Image.Image:
+    return v.point(lambda p: 255 if lo <= p < hi else 0)
+
+
+def _dots(w: int, h: int, step: int) -> Image.Image:
+    im = Image.new("L", (w, h), 0)
+    px = im.load()
+    for y in range(0, h, step):
+        for x in range((y // step * 2) % step, w, step):
+            px[x, y] = 255
+    return im
+
+
+def _pdok_1bit(v: Image.Image, z: int) -> Image.Image:
+    """'grijs' (white streets ~255, blocks ~235, open land ~242, water ~225, names dark grey) as
+    a 1-bit map. A plain threshold breaks the thin grey road casings into dashes, so: zoomed in,
+    outline every block and dot its fill; zoomed out, keep the roads and lines and dot the built-
+    up areas sparsely. Names are drawn solid with a white halo so they stay readable."""
+    w, h = v.size
+    text = _mask(v, 0, 160)
+    if z >= 16:
+        area = _mask(v, 0, 248)
+        lines = ImageChops.subtract(area, area.filter(ImageFilter.MinFilter(3)))
+        fill = ImageChops.multiply(_mask(v, 200, 239), _dots(w, h, 4))
+    else:
+        lines = _mask(v, 0, 222)
+        fill = ImageChops.multiply(_mask(v, 228, 239), _dots(w, h, 5))
+    black = ImageChops.subtract(ImageChops.lighter(lines, fill), text.filter(ImageFilter.MaxFilter(5)))
+    return ImageChops.invert(ImageChops.lighter(black, text))
 
 
 _INTER = Path(__file__).parent / "assets" / "trmnl-fonts" / "Inter.ttf"
@@ -94,7 +125,7 @@ async def render_map(width: int, height: int, center: dict | None = None, zoom: 
     lat_c = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * cy / (TILE * 2 ** z)))))
     lon_c = cx / (TILE * 2 ** z) * 360 - 180
     in_nl = NL[0] <= lat_c <= NL[1] and NL[2] <= lon_c <= NL[3]
-    src, credit, thr = (PDOK, "PDOK / Kadaster", THRESHOLD) if in_nl else (OSM, "© OpenStreetMap", OSM_THRESHOLD)
+    src, credit = (PDOK, "PDOK / Kadaster") if in_nl else (OSM, "© OpenStreetMap")
     async with httpx.AsyncClient(timeout=10, headers=UA) as cli:
         coords = [(tx, ty) for ty in range(ty0, ty1 + 1) for tx in range(tx0, tx1 + 1)]
         tiles = await asyncio.gather(*(_tile(cli, z, tx, ty, src) for tx, ty in coords))
@@ -103,9 +134,7 @@ async def render_map(width: int, height: int, center: dict | None = None, zoom: 
         canvas.paste(im, ((tx - tx0) * TILE, (ty - ty0) * TILE))
     ox, oy = int(x0 - tx0 * TILE), int(y0 - ty0 * TILE)
     img = canvas.crop((ox, oy, ox + width, oy + height))
-    # The "grijs" style is light grey with darker roads and labels: stretch, then threshold so
-    # roads, water edges and names stay and the fills go white.
-    img = img.point(lambda v: 255 if v > thr else 0)
+    img = _pdok_1bit(img, z) if in_nl else img.point(lambda v: 255 if v > OSM_THRESHOLD else 0)
     img = img.convert("RGB")
     d = ImageDraw.Draw(img)
     to = lambda la, lo: (_px(la, lo, z)[0] - x0, _px(la, lo, z)[1] - y0)  # noqa: E731
@@ -123,7 +152,9 @@ async def render_map(width: int, height: int, center: dict | None = None, zoom: 
             d.rectangle((x + 16, y - 13, x + 24 + tw, y + 13), fill="white", outline="black", width=2)
             d.text((x + 20, y), str(m["label"]), fill="black", font=f, anchor="lm")
     d.rectangle((0, 0, width - 1, height - 1), outline="black", width=2)
-    d.text((width - 6, height - 4), credit, fill="black", font=_font(11), anchor="rd")
+    small = _font(11)
+    d.rectangle((width - 12 - d.textlength(credit, font=small), height - 18, width - 3, height - 3), fill="white")
+    d.text((width - 6, height - 4), credit, fill="black", font=small, anchor="rd")
     out = io.BytesIO()
     img.convert("1", dither=Image.Dither.NONE).save(out, "PNG", optimize=True)
     return out.getvalue()

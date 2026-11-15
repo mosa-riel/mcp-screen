@@ -44,10 +44,13 @@ rendered in Chromium after the framework runtime settles (`TRMNL_PLUGINS_READY`)
 - `chart`: Vega-Lite spec (BSD), rendered to SVG in the page; with `entity_ids` + `hours` the
   add-on supplies Home Assistant history as dataset `ha` (`t`, `v`, `naam`), and without a
   spec draws a line chart of it. Black only, series told apart by dash.
-- `map`: PDOK BRT-Achtergrondkaart raster tiles ("grijs"; public, no key); outside the Netherlands
-  OpenStreetMap standard tiles (tile usage policy, attribution on the map), thresholded at 190;
-  stitched server-side, thresholded to line art, with route line and numbered markers; fits
-  the points when no zoom is given. Online at render time (tiles cached in memory).
+- `map`: PDOK BRT-Achtergrondkaart raster tiles ("grijs"; public, no key), stitched server-side
+  and redrawn as a 1-bit map: zoomed in (16+) every block outlined with a dotted fill and white
+  streets; further out the roads and lines with sparse dots for built-up areas; names solid with
+  a white halo (a plain threshold broke the thin grey road casings into dashes). Outside the
+  Netherlands OpenStreetMap standard tiles (tile usage policy, attribution on the map),
+  thresholded at 190. Route line and numbered markers on top; fits the points when no zoom is
+  given. Online at render time (tiles cached in memory).
 - `map` with `route: {van, naar, vervoer}`: the add-on looks up both places and the route itself
   (`geo.py`, a copy of mcp-geo's: OpenStreetMap Nominatim geocoding, FOSSGIS OSRM
   routing) and draws it with start and end markers, so the model never passes coordinates.
