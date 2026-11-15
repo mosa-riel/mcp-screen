@@ -1,6 +1,6 @@
 # mcp-screen
 
-reTerminal E1001 e-paper MCP server for the [reSpeaker agent](https://gitlab.zzapps.nl/development/respeaker-agent).
+reTerminal E1001 e-paper MCP server for the [reSpeaker agent](https://github.com/mosa-riel/respeaker-agent).
 Shows live Home Assistant dashboards (and ad-hoc screens) on the 800x480 1-bit e-paper:
 renders a PNG, **hosts it** on the LAN, and triggers the device's `refresh_screen` ESPHome
 service so it fetches and redraws. Speaks **streamable-HTTP** so the agent connects by `url`.
