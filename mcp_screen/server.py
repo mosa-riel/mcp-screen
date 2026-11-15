@@ -426,7 +426,9 @@ async def show_text(title: str, body: str = "") -> str:
 async def show_image(url: str) -> str:
     """Toon een afbeelding van een URL op het scherm (wordt naar 800x480 zwart-wit
     geschaald)."""
-    async with httpx.AsyncClient(timeout=15) as c:
+    # Wikimedia and others answer 403 to clients without a User-Agent.
+    headers = {"User-Agent": "mcp-screen/0.3 (reTerminal e-paper; https://github.com/mosa-riel/mcp-screen)"}
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=headers) as c:
         r = await c.get(url)
         r.raise_for_status()
     png = render.image_to_png(r.content)
