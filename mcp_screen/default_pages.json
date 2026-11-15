@@ -40,11 +40,11 @@
   },
   "binnen": {
     "title": "Binnen",
-    "description": "Temperatuur per kamer, hier in de huiskamer, buiten, en de komende uren",
+    "description": "Temperatuur per kamer, de huiskamer (sensor in het scherm), buiten, en de komende uren",
     "widgets": [
       {"type": "rooms", "entity_ids": ["climate.woonkamer", "climate.slaapkamer", "climate.kantoor", "climate.valentijn", "climate.julius"], "title": "Kamers"},
-      {"type": "value", "entity_id": "sensor.huiskamer_huiskamer_e_paperscherm_temperatuur", "label": "hier", "icon": "thermometer"},
-      {"type": "value", "entity_id": "sensor.huiskamer_huiskamer_e_paperscherm_luchtvochtigheid", "label": "vocht hier", "icon": "water-percent"},
+      {"type": "value", "entity_id": "sensor.huiskamer_huiskamer_e_paperscherm_temperatuur", "label": "huiskamer (scherm)", "icon": "thermometer"},
+      {"type": "value", "entity_id": "sensor.huiskamer_huiskamer_e_paperscherm_luchtvochtigheid", "label": "vocht huiskamer", "icon": "water-percent"},
       {"type": "value", "entity_id": "climate.badkamer_thermostaat", "label": "badkamer", "icon": "shower"},
       {"type": "value", "entity_id": "weather.forecast_home", "label": "buiten", "icon": "home-thermometer-outline"},
       {"type": "forecast_hours", "hours": 8, "wide": true}
