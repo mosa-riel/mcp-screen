@@ -44,6 +44,15 @@ class HA:
         resp = await self._response("weather/get_forecasts", {"entity_id": entity_id, "type": kind})
         return resp.get(entity_id, {}).get("forecast", [])
 
+    async def history(self, entity_ids: list[str], hours: float) -> list[list[dict]]:
+        from datetime import datetime, timedelta, timezone
+
+        start = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        r = await self._cli.get(f"/history/period/{start}", params={
+            "filter_entity_id": ",".join(entity_ids), "minimal_response": "", "no_attributes": ""})
+        r.raise_for_status()
+        return r.json()
+
     async def todo_items(self, entity_id: str) -> list[dict]:
         resp = await self._response("todo/get_items", {"entity_id": entity_id, "status": "needs_action"})
         return resp.get(entity_id, {}).get("items", [])

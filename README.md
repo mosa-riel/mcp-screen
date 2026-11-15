@@ -21,8 +21,40 @@ Two ports in one process:
 | `delete_page(name)` | remove a saved page (a built-in one comes back) |
 | `show_text(title, body="")` | a text screen |
 | `show_image(url)` | an image, dithered to 1-bit |
-| `show_html(html)` | free HTML/CSS, when the widgets don't fit the need |
+| `screen_components()` | the card building blocks, fields and examples |
+| `show_card(card, save_as="", description="")` | a free-form card from those blocks (TRMNL Framework) |
+| `show_html(html)` | free HTML/CSS (framework loaded), for drawings cards can't do |
 | `clear_screen()` | blank |
+
+## Cards (free-form, TRMNL Framework)
+
+`screen_components()` returns the building-block catalog (`cards.CATALOG`); `show_card(card)`
+renders a card composed from it. A card is `{"title", "instance", "icon", "align", "body"}`;
+the body is a tree of containers (`columns`, `stack`, `row`, `grid`) and elements (`value`,
+`title`, `label`, `description`, `text`, `item`, `table`, `progress`, `divider`, `icon`,
+`image`, `chart`, `map`, `compass`). Elements with `entity_id` show live Home Assistant values
+and redraw on change; a card can be saved as a page (`save_as`).
+
+`cards.py` turns the card into [TRMNL Framework](https://github.com/usetrmnl/trmnl-framework)
+markup (MIT; `screen--og screen--1bit`, 800x480) inside `body.environment.trmnl`, so the
+framework's e-ink design does the styling; all text is escaped. The page is served by this
+add-on (`/render/<token>.html`, same origin as the framework's root-relative `/fonts/`) and
+rendered in Chromium after the framework runtime settles (`TRMNL_PLUGINS_READY`).
+
+- `chart`: Vega-Lite spec (BSD), rendered to SVG in the page; with `entity_ids` + `hours` the
+  add-on supplies Home Assistant history as dataset `ha` (`t`, `v`, `naam`), and without a
+  spec draws a line chart of it. Black only, series told apart by dash.
+- `map`: PDOK BRT-Achtergrondkaart raster tiles ("grijs"; Netherlands only, public, no key)
+  stitched server-side, thresholded to line art, with route line and numbered markers; fits
+  the points when no zoom is given. Online at render time (tiles cached in memory).
+- `image`: fetched server-side, dithered (Floyd-Steinberg).
+- `compass`: SVG rose with up to three arrows (direction they point to).
+
+The framework CSS/JS (3.4.6, pinned commit), its fonts (SIL OFL 1.1; BlockKie CC BY 3.0, by
+the TRMNL team) and Vega are fetched at image build time (see the Dockerfile) into
+`mcp_screen/assets/{trmnl,trmnl-fonts,vendor}` and served at `/trmnl/`, `/fonts/`, `/vendor/`.
+Framework charts (Highcharts, commercial) and maps (TRMNL tile server) are not used.
+`show_html` loads the framework too, so free HTML can use its classes.
 
 ## Dashboards
 

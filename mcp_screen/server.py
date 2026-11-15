@@ -3,11 +3,13 @@
 Two servers in one process:
   1. the **MCP** endpoint (streamable-HTTP, MCP_PORT, default 8788) the agent calls;
   2. an embedded **HTTP host** (SCREEN_PORT, default 8799) the reTerminal fetches from:
-     /screen.png (what is on screen), /nav/home|next|prev.png (its buttons), /assets/*
-     (fonts and icons for the headless browser).
+     /screen.png (what is on screen), /nav/home|next|prev.png (its buttons), and for the
+     headless browser /assets/* (Inter, MDI icons), /trmnl/* (TRMNL Framework CSS + runtime),
+     /fonts/* (its fonts), /vendor/* (Vega) and /render/<token>.html (the page being rendered).
 
-Screens are dashboards built from widgets (widgets.py) filled with live Home Assistant data
-(ha.py), rendered to 1-bit PNG (render.py). Named pages (default_pages.json plus pages saved
+Screens are dashboards built from widgets (widgets.py) or cards the agent composes from TRMNL
+Framework building blocks (cards.py, maps.py), filled with live Home Assistant data (ha.py),
+rendered to 1-bit PNG (render.py). Named pages (default_pages.json plus pages saved
 in /data/pages.json) form the rotation the buttons step through. After publishing, the server
 calls the device's `refresh_screen` ESPHome service so it fetches and redraws.
 
@@ -42,6 +44,8 @@ from aioesphomeapi import APIClient
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+import cards
+import maps
 import render
 import widgets as wg
 from ha import HA, ws_endpoint
@@ -116,6 +120,7 @@ class Screen:
         self.pending: asyncio.Handle | None = None
         self.ha: HA | None = None
         self.lock: asyncio.Lock | None = None
+        self.problems: list[str] = []  # card blocks that failed in the last render
 
     def start(self) -> None:
         threading.Thread(target=self.loop.run_forever, daemon=True, name="screen").start()
@@ -142,7 +147,9 @@ class Screen:
         if view["kind"] == "static":
             self.watched = set()
             return view["png"], [], []
-        spec = view["spec"] if view["kind"] == "spec" else pages()[view["name"]]
+        spec = view["spec"] if view["kind"] in ("spec", "card") else pages()[view["name"]]
+        if "card" in spec:
+            return await self._render_card(spec["card"])
         items = wg.parse_widgets(spec["widgets"])
         states = await self.ha.states()
         need = wg.needs(items, WEATHER, states)
@@ -155,6 +162,41 @@ class Screen:
         png = await render.html_to_png(html)
         self.watched = need["entities"]
         return png, left, sorted(e for e in need["entities"] if e not in states)
+
+    async def _render_card(self, card: dict) -> tuple[bytes, list[dict], list[str]]:
+        card = cards.parse_card(card)
+        states = await self.ha.states()
+        assets: dict = {}
+        await self._prepare(card.get("body"), assets, states, narrow=False)
+        b = cards.Builder(states, assets, _icon)
+        html = b.page(card, ASSET_BASE)
+        self.problems = b.problems
+        png = await render.page_to_png(_serve_page(html))
+        self.watched = cards.watched(card)
+        return png, [], sorted(set(b.unknown))
+
+    async def _prepare(self, body, assets: dict, states: dict, narrow: bool) -> None:
+        """Server-side parts of a card: maps and photos as 1-bit PNGs, chart history."""
+        for n in cards._nodes(body):
+            t = n.get("type")
+            kids_narrow = narrow or t in ("columns", "grid", "row")
+            if n.get("children"):
+                await self._prepare(n["children"], assets, states, kids_narrow)
+            try:
+                height = int(cards._clamp(n.get("height", 300), 60, 440, 300))
+                width = int(cards._clamp(n.get("width", 360 if narrow else 740), 100, 760, 740))
+                if t == "map":
+                    png = await maps.render_map(width, height, n.get("center"), n.get("zoom"),
+                                                n.get("markers"), n.get("path"))
+                    assets[id(n)] = cards.data_uri_png(png)
+                elif t == "image" and n.get("url"):
+                    assets[id(n)] = cards.data_uri_png(await maps.render_photo(n["url"], width, height))
+                elif t == "chart" and n.get("entity_ids"):
+                    ids = n["entity_ids"] if isinstance(n["entity_ids"], list) else [n["entity_ids"]]
+                    raw = await self.ha.history(ids, cards._clamp(n.get("hours", 24), 1, 336, 24))
+                    assets[id(n)] = cards.history_rows(raw, states)
+            except Exception as err:  # noqa: BLE001 - the block shows as missing, the card still renders
+                print(f"[screen] {t} failed: {err}", flush=True)
 
     async def show(self, view: dict, push: bool = True) -> tuple[list[dict], list[str], str]:
         """Make `view` the current screen. → (left out, unknown entities, device result)."""
@@ -272,7 +314,28 @@ screen = Screen()
 
 # ── HTTP host for the device and the browser ────────────────────────────────────
 
-_TYPES = {".css": "text/css", ".woff2": "font/woff2", ".png": "image/png"}
+_TYPES = {".css": "text/css", ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf",
+          ".png": "image/png", ".js": "text/javascript", ".svg": "image/svg+xml"}
+# Static trees for the renderer. TRMNL's CSS asks for its fonts at the root (/fonts/...).
+_STATIC = {"/assets/": APP / "assets", "/trmnl/": APP / "assets" / "trmnl", "/fonts/": APP / "assets" / "trmnl-fonts",
+           "/vendor/": APP / "assets" / "vendor"}
+_pages: dict[str, str] = {}  # token → HTML being rendered (kept briefly)
+
+
+def _serve_page(html: str) -> str:
+    """Hold `html` for the renderer and return its URL on this add-on (same origin as /fonts)."""
+    import secrets
+
+    token = secrets.token_hex(8)
+    _pages[token] = html
+    while len(_pages) > 8:
+        _pages.pop(next(iter(_pages)))
+    return f"{ASSET_BASE}/render/{token}.html"
+
+
+def _icon(name: str, size: int = 32) -> str:
+    name = str(name).removeprefix("mdi:").removeprefix("mdi-")
+    return f'<i class="mdi mdi-{wg.esc(name)}" style="font-size:{size}px;line-height:1"></i>'
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -300,10 +363,15 @@ class _Handler(BaseHTTPRequestHandler):
                 print(f"[screen] nav failed: {err}", flush=True)
                 png = screen.png
             return self._send(png, "image/png")
-        if path.startswith("/assets/"):
-            f = (APP / path.lstrip("/")).resolve()
-            if f.is_file() and (APP / "assets") in f.parents:
-                return self._send(f.read_bytes(), _TYPES.get(f.suffix, "application/octet-stream"))
+        if path.startswith("/render/"):
+            html = _pages.get(path.rsplit("/", 1)[-1].removesuffix(".html"))
+            if html is not None:
+                return self._send(html.encode(), "text/html; charset=utf-8")
+        for prefix, root in _STATIC.items():
+            if path.startswith(prefix):
+                f = (root / path[len(prefix):]).resolve()
+                if f.is_file() and root.resolve() in f.parents:
+                    return self._send(f.read_bytes(), _TYPES.get(f.suffix, "application/octet-stream"))
         self.send_error(404)
 
 
@@ -402,6 +470,45 @@ async def show_dashboard(widgets: list[dict] | str, title: str = "", save_as: st
 
 
 @mcp.tool()
+async def screen_components() -> str:
+    """De bouwdoos voor show_card: alle blokken (getallen, titels, lijsten, tabellen, grafieken,
+    kaarten, kompas, iconen, afbeeldingen), hun velden, ontwerpregels en voorbeelden. Vraag dit op
+    voordat je een kaart maakt."""
+    return cards.CATALOG
+
+
+@mcp.tool()
+async def show_card(card: dict | str, save_as: str = "", description: str = "") -> str:
+    """Toon een zelf samengestelde kaart op het e-paper scherm (TRMNL-stijl, 800x480 zwart-wit),
+    als verlengstuk van je antwoord: getallen, lijstjes, stappen, vergelijkingen, grafieken,
+    kaarten, richtingen. card = JSON volgens screen_components (vraag die eerst op).
+    Blokken met entity_id blijven live bijwerken. save_as = bewaar als vast scherm (komt onder
+    de knoppen en in list_pages), description = korte omschrijving."""
+    try:
+        parsed = cards.parse_card(card)
+    except ValueError as err:
+        return f"Fout in card: {err}. Vraag screen_components op voor het formaat."
+    if save_as:
+        key = page_name(save_as)
+        saved = _saved()
+        saved[key] = {"title": parsed.get("title", key), "card": parsed,
+                      "description": description or parsed.get("title") or key}
+        DATA.mkdir(parents=True, exist_ok=True)
+        (DATA / "pages.json").write_text(json.dumps(saved, ensure_ascii=False, indent=2))
+        view, what = {"kind": "page", "name": key}, f"Kaart '{key}' bewaard en getoond"
+    else:
+        view, what = {"kind": "card", "spec": {"card": parsed}}, "Kaart getoond"
+    try:
+        _, unknown, result = await _on_screen(screen.show(view))
+    except Exception as err:  # noqa: BLE001
+        return f"Kaart niet gelukt: {str(err)[:200]}"
+    msg = _report(what, [], unknown, result)
+    if screen.problems:
+        msg += f" Problemen: {'; '.join(screen.problems)[:300]}."
+    return msg
+
+
+@mcp.tool()
 async def delete_page(name: str) -> str:
     """Verwijder een zelf bewaard scherm. Bij een ingebouwd scherm met dezelfde naam komt de
     standaardversie terug."""
@@ -440,14 +547,19 @@ async def show_image(url: str) -> str:
 
 @mcp.tool()
 async def show_html(html: str) -> str:
-    """Toon een vrij opgemaakt scherm via HTML+CSS (800x480) op het e-paper. Alleen als de
-    blokken van show_dashboard niet volstaan. Het scherm is 1-bit ZWART/WIT: hoog contrast,
-    zwarte tekst op wit, geen grijs. Lettertype Inter en Material Design Icons
-    (<i class="mdi mdi-weather-sunny"></i>) zijn al geladen, geen CDN nodig; GEEN emoji.
-    Houd het strak en groot (leesbaar op afstand). Geef volledige HTML met inline <style>."""
-    base = f'<link rel="stylesheet" href="{ASSET_BASE}/assets/base.css">'
-    html = re.sub(r"(<head[^>]*>)", r"\1" + base, html, count=1, flags=re.I) if re.search(r"<head", html, re.I) else base + html
-    png = await _on_screen(render.html_to_png(html))
+    """Toon een vrij opgemaakt scherm via HTML+CSS (800x480) op het e-paper, voor tekeningen
+    en ontwerpen die show_card niet kan. Het scherm is 1-bit ZWART/WIT: hoog contrast, geen
+    grijs, GEEN emoji. Geladen (geen CDN nodig): het TRMNL Framework (zet je inhoud in
+    <div class="screen screen--og screen--1bit"><div class="view view--full"><div class="layout">
+    ...</div></div></div>; klassen als value value--xlarge, title, label, item, columns, table),
+    Inter en Material Design Icons (<i class="mdi mdi-weather-sunny"></i>). Houd het groot en
+    strak. Geef volledige HTML met inline <style> of svg."""
+    head = f'<link rel="stylesheet" href="{ASSET_BASE}/assets/base.css">' + cards.framework_head(ASSET_BASE)
+    html = re.sub(r"(<head[^>]*>)", r"\1" + head, html, count=1, flags=re.I) if re.search(r"<head", html, re.I) else head + html
+    if re.search(r'class="[^"]*\bscreen\b', html) and not re.search(r'<body[^>]*\btrmnl\b', html):
+        html = re.sub(r"<body([^>]*)>", r'<body class="environment trmnl"\1>', html, count=1, flags=re.I) \
+            if re.search(r"<body", html, re.I) else f'<div class="environment trmnl">{html}</div>'
+    png = await _on_screen(render.page_to_png(_serve_page(html)))
     _, _, result = await _on_screen(screen.show({"kind": "static", "png": png}))
     return f"Scherm bijgewerkt ({result})"
 

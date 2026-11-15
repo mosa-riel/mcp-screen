@@ -45,6 +45,29 @@ async def html_to_png(html: str, dither: bool = False) -> bytes:
     return to_png(Image.open(io.BytesIO(png)), dither)
 
 
+async def page_to_png(url: str, dither: bool = False) -> bytes:
+    """Render a page served by this add-on (TRMNL Framework pages need same-origin /fonts).
+    Waits for the framework runtime (TRMNL_PLUGINS_READY) and charts (__cardDone)."""
+    global _browser
+    from playwright.async_api import async_playwright
+
+    if _browser is None:
+        pw = await async_playwright().start()
+        _browser = await pw.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage",
+                                                   "--font-render-hinting=full"])
+    page = await _browser.new_page(viewport={"width": W, "height": H})
+    try:
+        await page.goto(url, wait_until="networkidle")
+        await page.wait_for_function(
+            "(window.TRMNL_PLUGINS_READY === undefined || window.TRMNL_PLUGINS_READY === true)"
+            " && window.__cardDone !== false", timeout=20000)
+        await page.evaluate("document.fonts.ready")
+        png = await page.screenshot(type="png", clip={"x": 0, "y": 0, "width": W, "height": H})
+    finally:
+        await page.close()
+    return to_png(Image.open(io.BytesIO(png)), dither)
+
+
 def image_to_png(data: bytes) -> bytes:
     return to_png(Image.open(io.BytesIO(data)), dither=True)
 

@@ -6,3 +6,6 @@ uv.lock
 # fetched at image build time (Dockerfile); for local runs see README
 mcp_screen/assets/fonts/
 mcp_screen/assets/mdi/
+mcp_screen/assets/trmnl/
+mcp_screen/assets/trmnl-fonts/
+mcp_screen/assets/vendor/
