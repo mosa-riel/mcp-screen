@@ -20,7 +20,9 @@ import re
 import httpx
 
 UA = {"User-Agent": "mcp-screen (reTerminal e-paper; https://github.com/mosa-riel/mcp-screen)"}
-HOME_WORDS = {"thuis", "huis", "home", "mijn huis", "bij mij thuis", "hier"}
+# Words for the home address (Home Assistant's zone.home); an empty place means home too.
+HOME_WORDS = {"thuis", "huis", "home", "hier", "mijn huis", "bij mij thuis", "bij mij", "bij ons", "vanaf hier",
+              "vanaf thuis", "van thuis", "mijn adres", "ons huis", "huidige locatie", "mijn locatie", "hier in huis"}
 PROFILES = {"fiets": "routed-bike", "auto": "routed-car", "lopen": "routed-foot", "wandelen": "routed-foot"}
 WIND = ["N", "NNO", "NO", "ONO", "O", "OZO", "ZO", "ZZO", "Z", "ZZW", "ZW", "WZW", "W", "WNW", "NW", "NNW"]
 WIND_NAME = {"N": "noord", "O": "oost", "Z": "zuid", "W": "west"}
@@ -73,8 +75,8 @@ async def home(cli: httpx.AsyncClient) -> tuple[str, float, float]:
 
 async def geocode(cli: httpx.AsyncClient, name: str) -> tuple[str, float, float]:
     """→ (label, lat, lon). 'thuis' is zone.home; Dutch places via PDOK, else Open-Meteo."""
-    q = name.strip()
-    if q.lower() in HOME_WORDS:
+    q = (name or "").strip()
+    if not q or q.lower().strip(" .!?") in HOME_WORDS:
         return await home(cli)
     m = re.fullmatch(r"\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*", q)
     if m:
